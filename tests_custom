@@ -1,0 +1,137 @@
+#!/bin/sh
+
+#################################################################################
+#
+# Lynis custom test module - PAM Authentication Audit
+#
+# Enhancement Option 2: native Lynis integration.
+# Drop this file into the Lynis include directory as "tests_custom" and Lynis
+# loads it automatically on every audit:
+#
+#     sudo cp tests_custom /usr/share/lynis/include/tests_custom
+#     sudo chmod 640 /usr/share/lynis/include/tests_custom
+#     sudo lynis audit system --quick
+#
+# Test ID : CUST-0100
+# Weight  : L (light)
+# Category: security
+#
+# The checks read /etc/pam.d and report warnings/suggestions through the
+# standard Lynis reporting functions (ReportWarning / ReportSuggestion), so
+# findings appear in the console, lynis.log and lynis-report.dat.
+#
+#################################################################################
+
+    InsertSection "Custom tests - PAM authentication"
+
+    # Test        : CUST-0100
+    # Description : Audit PAM authentication configuration
+    Register --test-no CUST-0100 --weight L --network NO --category security --description "Audit PAM authentication configuration"
+
+    if [ ${SKIPTEST} -eq 0 ]; then
+
+        PAM_DIR="${ROOTDIR}etc/pam.d"
+        FOUNDPROBLEM=0
+
+        # Fall back to grep if the Lynis variable is not defined in this context
+        [ -z "${GREPBINARY}" ] && GREPBINARY="grep"
+
+        Display --indent 2 --text "- Auditing PAM authentication configuration"
+
+        if [ ! -d "${PAM_DIR}" ]; then
+            FOUNDPROBLEM=1
+            Display --indent 4 --text "PAM configuration directory" --result "NOT FOUND" --color RED
+            ReportWarning "${TEST_NO}" "PAM configuration directory not found" "${PAM_DIR}"
+        else
+
+            # -----------------------------------------------------------------
+            # Check: pam_permit.so (unconditional authentication)
+            # -----------------------------------------------------------------
+            if ${GREPBINARY} -Rq "pam_permit.so" ${PAM_DIR}; then
+                FOUNDPROBLEM=1
+                Display --indent 4 --text "Insecure pam_permit.so" --result "FOUND" --color RED
+                ReportWarning "${TEST_NO}" "pam_permit.so detected (grants unconditional authentication)"
+            else
+                Display --indent 4 --text "Insecure pam_permit.so" --result "${STATUS_OK}" --color GREEN
+            fi
+
+            # -----------------------------------------------------------------
+            # Check: nullok (empty password support)
+            # -----------------------------------------------------------------
+            if ${GREPBINARY} -Rq "nullok" ${PAM_DIR}; then
+                FOUNDPROBLEM=1
+                Display --indent 4 --text "Empty password support (nullok)" --result "ENABLED" --color RED
+                ReportWarning "${TEST_NO}" "nullok option detected (empty passwords allowed)"
+            else
+                Display --indent 4 --text "Empty password support (nullok)" --result "DISABLED" --color GREEN
+            fi
+
+            # -----------------------------------------------------------------
+            # Check: password history (remember=)
+            # -----------------------------------------------------------------
+            if ${GREPBINARY} -Rq "remember=" ${PAM_DIR}; then
+                Display --indent 4 --text "Password history (remember=)" --result "CONFIGURED" --color GREEN
+            else
+                FOUNDPROBLEM=1
+                Display --indent 4 --text "Password history (remember=)" --result "MISSING" --color YELLOW
+                ReportSuggestion "${TEST_NO}" "Configure password history with 'remember=' in pam_unix to prevent password reuse"
+            fi
+
+            # -----------------------------------------------------------------
+            # Check: password strength module
+            # -----------------------------------------------------------------
+            if ${GREPBINARY} -Rq "pam_pwquality.so\|pam_cracklib.so" ${PAM_DIR}; then
+                Display --indent 4 --text "Password strength module" --result "ACTIVE" --color GREEN
+            else
+                FOUNDPROBLEM=1
+                Display --indent 4 --text "Password strength module" --result "MISSING" --color YELLOW
+                ReportSuggestion "${TEST_NO}" "Enable pam_pwquality (or pam_cracklib) to enforce password strength"
+            fi
+
+            # -----------------------------------------------------------------
+            # Check: account lockout
+            # -----------------------------------------------------------------
+            if ${GREPBINARY} -Rq "pam_faillock.so\|pam_tally2.so" ${PAM_DIR}; then
+                Display --indent 4 --text "Account lockout module" --result "ACTIVE" --color GREEN
+            else
+                FOUNDPROBLEM=1
+                Display --indent 4 --text "Account lockout module" --result "MISSING" --color YELLOW
+                ReportSuggestion "${TEST_NO}" "Enable pam_faillock (or pam_tally2) to lock accounts after repeated failures"
+            fi
+
+            # -----------------------------------------------------------------
+            # Check: insecure MD5 hashing
+            # -----------------------------------------------------------------
+            if ${GREPBINARY} -Rq "md5" ${PAM_DIR}; then
+                FOUNDPROBLEM=1
+                Display --indent 4 --text "Insecure MD5 hashing" --result "FOUND" --color RED
+                ReportWarning "${TEST_NO}" "MD5 password hashing detected, upgrade to SHA512"
+            else
+                Display --indent 4 --text "Insecure MD5 hashing" --result "NONE" --color GREEN
+            fi
+
+            # -----------------------------------------------------------------
+            # Check: debug option left enabled
+            # -----------------------------------------------------------------
+            if ${GREPBINARY} -Rq "\bdebug\b" ${PAM_DIR}; then
+                FOUNDPROBLEM=1
+                Display --indent 4 --text "PAM debug option" --result "ENABLED" --color RED
+                ReportWarning "${TEST_NO}" "debug option enabled in PAM configuration (may leak details to logs)"
+            else
+                Display --indent 4 --text "PAM debug option" --result "NONE" --color GREEN
+            fi
+
+        fi
+
+        # ---------------------------------------------------------------------
+        # Summary line for the whole test
+        # ---------------------------------------------------------------------
+        if [ ${FOUNDPROBLEM} -eq 0 ]; then
+            Display --indent 2 --text "- PAM authentication configuration" --result "${STATUS_OK}" --color GREEN
+        else
+            Display --indent 2 --text "- PAM authentication configuration" --result "${STATUS_WARNING}" --color RED
+        fi
+
+    fi
+
+#################################################################################
