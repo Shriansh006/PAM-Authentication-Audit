@@ -9,10 +9,21 @@ Built on top of the official Lynis repository: <https://github.com/CISOfy/lynis>
 
 ## Contents
 
-| File                   | Enhancement                          | Type               |
-|------------------------|--------------------------------------|--------------------|
-| `pam_audit_enhanced.sh`| Option 1 — expanded standalone audit | Bash script        |
-| `tests_custom`         | Option 2 — native Lynis test module  | Lynis `tests_custom` |
+| File                    | Enhancement                          | Type                 |
+|-------------------------|--------------------------------------|----------------------|
+| `pam_audit_reference.sh`| Reference script — base PAM audit    | Bash script          |
+| `pam_audit_enhanced.sh` | Option 1 — expanded standalone audit | Bash script          |
+| `tests_custom`          | Option 2 — native Lynis test module  | Lynis `tests_custom` |
+
+## Reference Script — `pam_audit_reference.sh`
+
+The base script provided with the exercise. It reads `/etc/pam.d` and runs
+four checks (`pam_permit.so`, `nullok`, `remember=`, `pam_unix.so`), printing
+one line per check.
+
+```bash
+bash pam_audit_reference.sh
+```
 
 ## Enhancement Option 1 — `pam_audit_enhanced.sh`
 
